@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Assignment 1- Data Visulaization </title>
+    <script src="./js/d3.js" charset="utf-8"></script>
+    <style>
+        body {
+            font: 12px Arial;
+        }
+        
+        .axis line {
+            fill: none;
+            stroke: grey;
+            stroke-width: 1;
+            shape-rendering: crispEdges;
+        }
+        
+        div.tooltip {
+            position: absolute;
+            text-align: left;
+            width: 160px;
+            height: 90px;
+            padding: 2px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="text/javascript">
+        //defining margin array and width and height of the plot 
+        var margin = {
+                top: 30,
+                right: 40,
+                bottom: 30,
+                left: 50
+            },
+            width = 750 - margin.left - margin.right,
+            height = 650 - margin.top - margin.bottom;
+
+        // defining range of the axis 
+        var x = d3.scale.linear().range([0, width]);
+        var y = d3.scale.linear().range([height, 0]);
+
+        var xAxis = d3.svg.axis().scale(x) //defining xAxis
+            .orient("bottom").ticks(5);
+
+        var yAxis = d3.svg.axis().scale(y) //defining yAxis
+            .orient("left").ticks(5);
+        var svg = d3.select("body")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        var color = d3.scale.category10(); //defining colors
+        var div = d3.select("body").append("div") // adding tooltip for mousehover
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        //reading file
+        d3.csv("./data/Facebook-Government-Report-2015-H1.csv", function(csvData) {
+            var filteredData = csvData.filter(function(d) {
+                d.numberOfRequests = parseInt(d.numberOfRequests.replace(/,/g, ''));
+                d.numberOfUserAccounts = parseInt(d.numberOfUserAccounts.replace(/,/g, ''));
+                return d.numberOfRequests > 0 && d.numberOfRequests < 1000; // restricting countries with higher requests than 1000 for better visualization
+            });
+
+            //calling the function to build our graph
+            createScatterPlot(filteredData);
+        });
+
+        // defining function to draw scatter plot 
+        var createScatterPlot = function(dataset) {
+            x.domain(d3.extent(dataset, function(d) {
+                return d.numberOfUserAccounts;
+            }));
+            y.domain([0, d3.max(dataset, function(d) {
+                return d.numberOfRequests;
+            })]);
+            //scaling no of requests data
+            var numberOfRequestsScale = d3.scale.linear()
+                .domain([0, d3.max(dataset, function(d) {
+                    return d.numberOfRequests;
+                })])
+                .rangeRound([0, 650])
+                .clamp(true);
+            //scaling no of user accounts data
+            var numberOfUserAccountsScale = d3.scale.linear()
+                .domain([0, d3.max(dataset, function(d) {
+                    return d.numberOfUserAccounts;
+                })])
+                .rangeRound([0, 750])
+                .clamp(true);
+            //scaling percentage of requests
+            var percentageOfRequestsScale = d3.scale.linear()
+                .domain([0, 100])
+                .rangeRound([4, 12])
+                .clamp(true);
+            // Adding the X Axis
+            svg.append("g")
+                .attr("class", "x axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis)
+                .append("text")
+                .attr("class", "label")
+                .attr("x", width)
+                .attr("y", -6)
+                .style("text-anchor", "end")
+                .text("# User Accounts");
+            // Adding the Y Axis
+            svg.append("g")
+                .attr("class", "y axis")
+                .call(yAxis)
+                .append("text")
+                .attr("class", "label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 6)
+                .attr("dy", ".71em")
+                .style("text-anchor", "end")
+                .text("# User Requests")
+                //creating plot
+            svg.selectAll("circle")
+                .data(dataset)
+                .enter()
+                .append("circle")
+                .attr("cx", function(d) {
+                    return numberOfUserAccountsScale(d.numberOfUserAccounts) + margin.left;
+                })
+                .attr("cy", function(d) {
+                    return height - (numberOfRequestsScale(d.numberOfRequests) + margin.top);
+                })
+                .attr("r", function(d) { // size of the circle depends on the percentage of their requests
+                    if (d.numberOfUserAccounts < 5) return 3;
+                    else {
+                        perct = (d.PercentageOfRequests).replace("%", "");
+                        return percentageOfRequestsScale(perct);
+                    }
+                })
+                .style("fill", function(d) {// color of the circle depends on the Content Restrictions
+                    return color(d.ContentRestrictions)
+                })
+                .on("mouseover", function(d) {
+                    div.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    div.html("<center>" + d.Country + "</center><br/> Requests : " + d.numberOfRequests + "<br/> User Accounts : " + d.numberOfUserAccounts + "<br/> Requests : " + d.PercentageOfRequests + "<br/> Restrictions : " + d.ContentRestrictions)
+                        .style("left", (d3.event.pageX + 10) + "px")
+                        .style("top", (d3.event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    div.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+            //defining legends
+            var legendGroup = svg.append('g')
+                .attr('class', 'legend')
+                .attr('transform', function(d, i) {
+                    return "translate(0," + i * 20 + ")";
+                });
+
+            var legendEntry = legendGroup.selectAll('g')
+                .data(color.domain());
+
+            legendEntry.enter().append("g")
+                .attr("class", "legend-entry")
+                .attr("transform", function(d, i) {
+                    return "translate(0," + i * 20 + ")";
+                });
+
+		    legendEntry.append("rect")
+                .attr("x", width + 22)
+                .attr("width", 18)
+                .attr("height", 18)
+                .style("fill", color);
+
+            legendEntry.append("text")
+                .attr("x", width + 14)
+                .attr("y", 9)
+                .attr("dy", ".35em")
+                .style("text-anchor", "end")
+                .text(function(d) {
+                    return d;
+                });
+
+        };
+    </script>
+</body>
+
+</html>
